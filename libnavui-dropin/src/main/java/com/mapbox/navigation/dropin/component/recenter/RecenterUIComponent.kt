@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flattenConcat
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArraySet
 
 internal sealed interface RecenterUIComponent : UIComponent {
     val container: FrameLayout
@@ -45,8 +46,11 @@ internal class MapboxRecenterUIComponent(
     private val lifecycleOwner: LifecycleOwner
 ) : RecenterUIComponent, NavigationCameraStateChangedObserver {
 
+    private val clickListeners = CopyOnWriteArraySet<OnRecenterButtonClickedListener>()
+
     init {
         observeRecenterButtonState()
+        view.setOnClickListener { clickListeners.forEach { it.onRecenterButtonClicked() } }
     }
 
     private fun performAction(vararg action: Flow<RecenterButtonAction>) {
@@ -63,6 +67,14 @@ internal class MapboxRecenterUIComponent(
     override fun onNavigationStateChanged(state: NavigationState) {
         val navStateAction = flowOf(RecenterButtonAction.UpdateNavigationState(state))
         performAction(navStateAction)
+    }
+
+    fun registerOnRecenterButtonClickedListener(listener: OnRecenterButtonClickedListener) {
+        clickListeners.add(listener)
+    }
+
+    fun unregisterOnRecenterButtonClickedListener(listener: OnRecenterButtonClickedListener) {
+        clickListeners.remove(listener)
     }
 
     private fun observeRecenterButtonState() {

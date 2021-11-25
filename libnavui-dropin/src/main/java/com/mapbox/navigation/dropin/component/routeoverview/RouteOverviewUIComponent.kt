@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flattenConcat
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArraySet
 
 internal sealed interface RouteOverviewUIComponent : UIComponent {
     val container: FrameLayout
@@ -44,8 +45,11 @@ internal class MapboxRouteOverviewUIComponent(
     private val lifecycleOwner: LifecycleOwner
 ) : RouteOverviewUIComponent, NavigationCameraStateChangedObserver {
 
+    private val clickListeners = CopyOnWriteArraySet<OnOverviewButtonClickedListener>()
+
     init {
         observeRouteOverviewState()
+        view.setOnClickListener { clickListeners.forEach { it.onOverviewButtonClicked() } }
     }
 
     private fun performAction(vararg action: Flow<RouteOverviewButtonAction>) {
@@ -64,6 +68,14 @@ internal class MapboxRouteOverviewUIComponent(
             RouteOverviewButtonAction.UpdateCameraState(navigationCameraState)
         )
         performAction(cameraAction)
+    }
+
+    fun registerOnOverviewButtonClickedListener(listener: OnOverviewButtonClickedListener) {
+        clickListeners.add(listener)
+    }
+
+    fun unregisterOnOverviewButtonClickedListener(listener: OnOverviewButtonClickedListener) {
+        clickListeners.remove(listener)
     }
 
     private fun observeRouteOverviewState() {

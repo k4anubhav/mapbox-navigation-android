@@ -21,7 +21,6 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.MapInitOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.plugin.LocationPuck2D
-import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.delegates.listeners.OnStyleLoadedListener
 import com.mapbox.maps.plugin.gestures.OnMapLongClickListener
 import com.mapbox.maps.plugin.gestures.gestures
@@ -37,6 +36,7 @@ import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import com.mapbox.navigation.dropin.component.UIComponent
 import com.mapbox.navigation.dropin.component.camera.CameraViewModel
+import com.mapbox.navigation.dropin.component.camera.MapboxCameraUIComponent
 import com.mapbox.navigation.dropin.component.maneuver.CustomManeuverUIComponent
 import com.mapbox.navigation.dropin.component.maneuver.ManeuverViewModel
 import com.mapbox.navigation.dropin.component.maneuver.MapboxManeuverUIComponent
@@ -44,6 +44,7 @@ import com.mapbox.navigation.dropin.component.navigationstate.NavigationStateAct
 import com.mapbox.navigation.dropin.component.navigationstate.NavigationStateViewModel
 import com.mapbox.navigation.dropin.component.recenter.CustomRecenterUIComponent
 import com.mapbox.navigation.dropin.component.recenter.MapboxRecenterUIComponent
+import com.mapbox.navigation.dropin.component.recenter.OnRecenterButtonClickedListener
 import com.mapbox.navigation.dropin.component.recenter.RecenterViewModel
 import com.mapbox.navigation.dropin.component.routearrow.MapboxRouteArrowUIComponent
 import com.mapbox.navigation.dropin.component.routearrow.RouteArrowViewModel
@@ -53,6 +54,7 @@ import com.mapbox.navigation.dropin.component.routeline.RouteLineViewModel
 import com.mapbox.navigation.dropin.component.routeline.RouteLineViewModelFactory
 import com.mapbox.navigation.dropin.component.routeoverview.CustomRouteOverviewUIComponent
 import com.mapbox.navigation.dropin.component.routeoverview.MapboxRouteOverviewUIComponent
+import com.mapbox.navigation.dropin.component.routeoverview.OnOverviewButtonClickedListener
 import com.mapbox.navigation.dropin.component.routeoverview.RouteOverviewViewModel
 import com.mapbox.navigation.dropin.component.sound.CustomSoundButtonUIComponent
 import com.mapbox.navigation.dropin.component.sound.MapboxSoundButtonUIComponent
@@ -66,6 +68,7 @@ import com.mapbox.navigation.dropin.component.tripprogress.TripProgressViewModel
 import com.mapbox.navigation.dropin.databinding.MapboxLayoutDropInViewBinding
 import com.mapbox.navigation.dropin.util.MapboxDropInUtils
 import com.mapbox.navigation.ui.maneuver.view.MapboxManeuverView
+import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraStateChangedObserver
 import com.mapbox.navigation.ui.maps.camera.view.MapboxRecenterButton
 import com.mapbox.navigation.ui.maps.camera.view.MapboxRouteOverviewButton
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
@@ -144,27 +147,6 @@ class NavigationView : ConstraintLayout {
                     }
                 }
             }
-            MapboxDropInUtils.getLastLocation(
-                this@NavigationView.context,
-                WeakReference<(Expected<Exception, LocationEngineResult>) -> Unit> { result ->
-                    result.fold(
-                        {
-                            Log.e(TAG, "Error obtaining current location", it)
-                        },
-                        {
-                            it.lastLocation?.apply {
-                                navigationLocationProvider.changePosition(
-                                    this,
-                                    listOf(),
-                                    null,
-                                    null
-                                )
-                                cameraViewModel.consumeLocationUpdate(this)
-                            }
-                        }
-                    )
-                }
-            )
         }
     }
 
@@ -185,10 +167,6 @@ class NavigationView : ConstraintLayout {
 
     private val navigationStateViewModel: NavigationStateViewModel by lazy {
         ViewModelProvider(activity)[NavigationStateViewModel::class.java]
-    }
-
-    private val cameraViewModel: CameraViewModel by lazy {
-        ViewModelProvider(activity)[CameraViewModel::class.java]
     }
 
     private val mapInitOptions: MapInitOptions
@@ -308,7 +286,16 @@ class NavigationView : ConstraintLayout {
                 view = recenterButtonView,
                 viewModel = recenterViewModel,
                 lifecycleOwner = lifeCycleOwner
-            )
+            ).also { recenterComponent ->
+                recenterComponent.registerOnRecenterButtonClickedListener {
+                    uiComponents
+                        .filter { it is OnRecenterButtonClickedListener }
+                        .map { it as OnRecenterButtonClickedListener }
+                        .forEach {
+                            it.onRecenterButtonClicked()
+                        }
+                }
+            }
         } else {
             binding.recenterContainer.addView(view)
             CustomRecenterUIComponent(
@@ -330,7 +317,16 @@ class NavigationView : ConstraintLayout {
                 view = routeOverviewButtonView,
                 viewModel = routeOverviewViewModel,
                 lifecycleOwner = lifeCycleOwner
-            )
+            ).also { overviewComponent ->
+                overviewComponent.registerOnOverviewButtonClickedListener {
+                    uiComponents
+                        .filter { it is OnOverviewButtonClickedListener }
+                        .map { it as OnOverviewButtonClickedListener }
+                        .forEach {
+                            it.onOverviewButtonClicked()
+                        }
+                }
+            }
         } else {
             binding.routeOverviewContainer.addView(view)
             CustomRouteOverviewUIComponent(
@@ -408,6 +404,46 @@ class NavigationView : ConstraintLayout {
         uiComponents.add(tripProgressComponent)
     }
 
+    private fun bindCamera() {
+        val cameraComponent = MapboxCameraUIComponent(
+            mapView = mapView,
+            viewModel = ViewModelProvider(activity)[CameraViewModel::class.java],
+            lifecycleOwner = lifeCycleOwner
+        )
+        MapboxDropInUtils.getLastLocation(
+            this@NavigationView.context,
+            WeakReference<(Expected<Exception, LocationEngineResult>) -> Unit> { result ->
+                result.fold(
+                    {
+                        Log.e(TAG, "Error obtaining current location", it)
+                    },
+                    {
+                        it.lastLocation?.apply {
+                            navigationLocationProvider.changePosition(
+                                this,
+                                listOf(),
+                                null,
+                                null
+                            )
+                            cameraComponent.onNewRawLocation(this)
+                        }
+                    }
+                )
+            }
+        )
+        lifeCycleOwner.lifecycleScope.launch {
+            cameraComponent.navigationCameraState.collect {
+                uiComponents.forEach { uiComponent ->
+                    when (uiComponent) {
+                        is NavigationCameraStateChangedObserver ->
+                            uiComponent.onNavigationCameraStateChanged(it)
+                    }
+                }
+            }
+        }
+        uiComponents.add(cameraComponent)
+    }
+
     private fun observeNavigationState() {
         lifeCycleOwner.lifecycleScope.launch {
             navigationStateViewModel.state.collect { state ->
@@ -477,7 +513,6 @@ class NavigationView : ConstraintLayout {
                 externalLocationObservers.forEach {
                     it.onNewRawLocation(locationUpdate)
                 }
-                cameraViewModel.consumeLocationUpdate(locationUpdate)
             }
         }
     }
@@ -565,11 +600,6 @@ class NavigationView : ConstraintLayout {
         observeLocationMatcherResults()
         observeFinalDestinationArrivals()
         observeNavigationState()
-        lifeCycleOwner.lifecycleScope.launch {
-            cameraViewModel.cameraUpdates.collect {
-                mapView.camera.easeTo(it.first, it.second)
-            }
-        }
     }
 
     private fun performActions() {
@@ -598,6 +628,7 @@ class NavigationView : ConstraintLayout {
         bindTripProgressView(viewProvider.tripProgressProvider?.invoke())
         bindRecenterButtonView(viewProvider.recenterButtonProvider?.invoke())
         bindRouteOverviewButtonView(viewProvider.recenterButtonProvider?.invoke())
+        bindCamera()
 
         renderStateMutations()
         performActions()
