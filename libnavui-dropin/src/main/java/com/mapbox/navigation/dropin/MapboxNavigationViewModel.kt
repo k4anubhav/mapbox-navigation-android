@@ -3,7 +3,6 @@ package com.mapbox.navigation.dropin
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
-import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
@@ -46,7 +45,7 @@ internal class MapboxNavigationViewModel(
     }
 
     private val _rawLocationUpdates: MutableSharedFlow<Location> = MutableSharedFlow()
-    fun rawLocationUpdates(): Flow<Location> = _rawLocationUpdates
+    val rawLocationUpdates: Flow<Location> = _rawLocationUpdates
 
     private val _newLocationMatcherResult: MutableSharedFlow<LocationMatcherResult> =
         MutableSharedFlow()
@@ -146,13 +145,13 @@ internal class MapboxNavigationViewModel(
         )
     }
 
-    @VisibleForTesting
     private val locationObserver = object : LocationObserver {
         override fun onNewRawLocation(rawLocation: Location) {
             viewModelScope.launch {
                 _rawLocationUpdates.emit(rawLocation)
             }
         }
+
         override fun onNewLocationMatcherResult(locationMatcherResult: LocationMatcherResult) {
             viewModelScope.launch {
                 _newLocationMatcherResult.emit(locationMatcherResult)
