@@ -35,6 +35,7 @@ import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
 import com.mapbox.navigation.core.trip.session.VoiceInstructionsObserver
 import com.mapbox.navigation.dropin.component.UIComponent
+import com.mapbox.navigation.dropin.component.camera.CameraUpdatesInhibitedObserver
 import com.mapbox.navigation.dropin.component.camera.CameraViewModel
 import com.mapbox.navigation.dropin.component.camera.MapboxCameraUIComponent
 import com.mapbox.navigation.dropin.component.maneuver.CustomManeuverUIComponent
@@ -437,6 +438,16 @@ class NavigationView : ConstraintLayout {
                     when (uiComponent) {
                         is NavigationCameraStateChangedObserver ->
                             uiComponent.onNavigationCameraStateChanged(it)
+                    }
+                }
+            }
+        }
+        lifeCycleOwner.lifecycleScope.launch {
+            cameraComponent.cameraUpdatesInhibited.collect {
+                uiComponents.forEach { uiComponent ->
+                    when (uiComponent) {
+                        is CameraUpdatesInhibitedObserver ->
+                            uiComponent.cameraUpdatesInhibitedStatus(it)
                     }
                 }
             }

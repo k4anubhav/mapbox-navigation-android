@@ -5,6 +5,7 @@ import android.widget.FrameLayout
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.mapbox.navigation.dropin.component.UIComponent
+import com.mapbox.navigation.dropin.component.camera.CameraUpdatesInhibitedObserver
 import com.mapbox.navigation.dropin.component.navigationstate.NavigationState
 import com.mapbox.navigation.dropin.util.MapboxDropInUtils.toVisibility
 import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
@@ -44,7 +45,7 @@ internal class MapboxRecenterUIComponent(
     private val view: MapboxRecenterButton,
     private val viewModel: RecenterViewModel,
     private val lifecycleOwner: LifecycleOwner
-) : RecenterUIComponent, NavigationCameraStateChangedObserver {
+) : RecenterUIComponent, NavigationCameraStateChangedObserver, CameraUpdatesInhibitedObserver {
 
     private val clickListeners = CopyOnWriteArraySet<OnRecenterButtonClickedListener>()
 
@@ -67,6 +68,11 @@ internal class MapboxRecenterUIComponent(
     override fun onNavigationStateChanged(state: NavigationState) {
         val navStateAction = flowOf(RecenterButtonAction.UpdateNavigationState(state))
         performAction(navStateAction)
+    }
+
+    override fun cameraUpdatesInhibitedStatus(status: Boolean) {
+        val cameraAction = flowOf(RecenterButtonAction.UpdateCameraUpdatesInhibitedState(status))
+        performAction(cameraAction)
     }
 
     fun registerOnRecenterButtonClickedListener(listener: OnRecenterButtonClickedListener) {
