@@ -23,6 +23,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.delegates.listeners.OnStyleLoadedListener
+import com.mapbox.maps.plugin.gestures.OnMapClickListener
 import com.mapbox.maps.plugin.gestures.OnMapLongClickListener
 import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
@@ -110,11 +111,23 @@ class NavigationView : ConstraintLayout {
             false
         }
     }
+
+    private val mapClickListener = OnMapClickListener { point ->
+        uiComponents.forEach { uiComponent ->
+            when (uiComponent) {
+                is OnMapClickListener -> {
+                    uiComponent.onMapClick(point)
+                }
+            }
+        }
+        false
+    }
+
     private val binding = MapboxLayoutDropInViewBinding.inflate(
         LayoutInflater.from(context),
         this
     )
-    var navigationViewOptions: NavigationViewOptions
+    lateinit var navigationViewOptions: NavigationViewOptions
         private set
 
     @VisibleForTesting
@@ -175,6 +188,13 @@ class NavigationView : ConstraintLayout {
                 )
             )
         )[MapboxNavigationViewModel::class.java]
+    }
+
+    private val routeLineViewModel: RouteLineViewModel by lazy {
+        ViewModelProvider(
+            activity,
+            RouteLineViewModelFactory(navigationViewOptions.mapboxRouteLineOptions)
+        )[RouteLineViewModel::class.java]
     }
 
     private val navigationStateViewModel: NavigationStateViewModel by lazy {
@@ -246,10 +266,6 @@ class NavigationView : ConstraintLayout {
     }
 
     private fun bindRouteLine() {
-        val routeLineViewModel = ViewModelProvider(
-            activity,
-            RouteLineViewModelFactory(navigationViewOptions.mapboxRouteLineOptions)
-        )[RouteLineViewModel::class.java]
         val routeLineComponent = RouteLineUIComponent.MapboxRouteLineUIComponent(
             view = mapView,
             viewModel = routeLineViewModel
@@ -427,6 +443,14 @@ class NavigationView : ConstraintLayout {
         }
     }
 
+    private fun observeRouteResets() {
+        lifeCycleOwner.lifecycleScope.launch {
+            routeLineViewModel.routeResets.collect { routes ->
+                mapboxNavigationViewModel.setRoutes(routes)
+            }
+        }
+    }
+
     private fun observeRouteProgress() {
         lifeCycleOwner.lifecycleScope.launch {
             mapboxNavigationViewModel.routeProgressUpdates.collect { routeProgress ->
@@ -559,6 +583,7 @@ class NavigationView : ConstraintLayout {
         observeLocationMatcherResults()
         observeFinalDestinationArrivals()
         observeNavigationState()
+        observeRouteResets()
         lifeCycleOwner.lifecycleScope.launch {
             cameraViewModel.cameraUpdates.collect {
                 mapView.camera.easeTo(it.first, it.second)
@@ -601,6 +626,7 @@ class NavigationView : ConstraintLayout {
         // This was added to facilitate getting a route into mapbox navigation so work could go forward.
         // It may be temporary.
         mapView.gestures.addOnMapLongClickListener(onMapLongClickListener)
+        mapView.gestures.addOnMapClickListener(mapClickListener)
     }
 
     internal fun addRouteProgressObserver(observer: RouteProgressObserver) {

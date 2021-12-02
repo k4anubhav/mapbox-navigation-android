@@ -3,6 +3,7 @@ package com.mapbox.navigation.dropin
 import android.location.Location
 import androidx.lifecycle.LifecycleOwner
 import com.mapbox.api.directions.v5.models.BannerInstructions
+import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.VoiceInstructions
 import com.mapbox.navigation.base.trip.model.RouteLegProgress
 import com.mapbox.navigation.base.trip.model.RouteProgress
@@ -301,5 +302,18 @@ class MapboxNavigationViewModelTest {
         val result = def.await()
 
         assertEquals(expected, result)
+    }
+
+    @Test
+    fun setRoutes() {
+        val routesList = listOf<DirectionsRoute>()
+        val mockMapboxNavigation = mockk<MapboxNavigation>(relaxed = true)
+        val factory = mockk<DropInUIMapboxNavigationFactory> {
+            every { getMapboxNavigation() } returns mockMapboxNavigation
+        }
+
+        MapboxNavigationViewModel(factory).setRoutes(routesList)
+
+        verify { mockMapboxNavigation.setRoutes(routesList) }
     }
 }

@@ -113,6 +113,10 @@ internal class MapboxNavigationViewModel(
         mapboxNavigation.mapboxReplayer.stop()
     }
 
+    fun setRoutes(routes: List<DirectionsRoute>) {
+        mapboxNavigation.setRoutes(routes)
+    }
+
     // This was added to facilitate getting a route into mapbox navigation so work could go forward.
     // It may be temporary.
     fun findRoute(origin: Point, destination: Point, context: Context) {
